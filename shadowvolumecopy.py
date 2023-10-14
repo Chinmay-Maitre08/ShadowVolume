@@ -16,15 +16,13 @@ backup_interval_seconds = 3600  # Backup every 1 hour (adjust as needed)
 class VSSFileChangeHandler(FileSystemEventHandler):
     def __init__(self):
         self.last_snapshot_time = 0
-        self.last_file_content = None
+        self.last_original_content = None
 
     def on_modified(self, event):
-        # When the file is modified, create a new backup and save the original
-        print(f"File '{event.src_path}' has been modified. Creating a backup and saving the original.")
-        backup_file()
+        # When the file is modified, save the original file, create a backup, and track changes
+        print(f"File '{event.src_path}' has been modified. Saving the original and creating a backup.")
         save_original()
-
-        # Track changes in the file
+        backup_file()
         track_changes()
 
         # Check for backups
@@ -59,7 +57,7 @@ def create_volume_snapshot():
         print(f"Snapshot Device Name: {snapshot.DeviceObject}")
 
 def backup_file():
-    # Create a backup of the monitored file in the backup directory
+    # Create a backup of the modified file in the backup directory
     current_time = time.strftime("%Y%m%d%H%M%S", time.localtime())
     backup_file_name = f"backup_{current_time}.txt"
     backup_path = os.path.join(backup_directory, backup_file_name)
@@ -77,17 +75,19 @@ def save_original():
     original_path = os.path.join(original_directory, original_file_name)
 
     try:
-        shutil.copy(file_to_monitor, original_path)
+        original_content = read_file_content()
+        with open(original_path, 'w') as original_file:
+            original_file.write(original_content)
         print(f"Saved the original file as: {original_path}")
     except Exception as e:
         print(f"Error saving the original file: {str(e)}")
 
 def track_changes():
     current_file_content = read_file_content()
-    if file_change_handler.last_file_content is not None and current_file_content != file_change_handler.last_file_content:
+    if file_change_handler.last_original_content is not None and current_file_content != file_change_handler.last_original_content:
         print("Changes detected in the file:")
-        diff_lines(current_file_content, file_change_handler.last_file_content)
-    file_change_handler.last_file_content = current_file_content
+        diff_lines(current_file_content, file_change_handler.last_original_content)
+    file_change_handler.last_original_content = current_file_content
 
 def read_file_content():
     with open(file_to_monitor, 'r') as file:
@@ -103,7 +103,7 @@ def diff_lines(content1, content2):
 
 if __name__ == "__main__":
     # Create the directories if they don't exist
-    for directory in [snapshot_directory, backup_directory]:
+    for directory in [snapshot_directory, backup_directory, original_directory]:
         if not os.path.exists(directory):
             os.makedirs(directory)
 
