@@ -2,15 +2,16 @@ import win32com.client
 import os
 import time
 import shutil
+import subprocess
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 import difflib
 
 # Specify the file to monitor and the directory where snapshots will be created
-file_to_monitor = "E:\\DeepCytes\\Ransomware_Research\\Testrun.txt"
+file_to_monitor = "E:\\DeepCytes\\Ransomware_Research\\ShadowVolumeCopy\\trial_run.txt"
 snapshot_directory = "E:\\Deepcytes\\_Buffers_"
-backup_directory = "E:\\DeepCytes\\Ransomware_Research\\backup"
-original_directory = "E:\\DeepCytes\\Ransomware_Research\\original"
+backup_directory = "E:\\DeepCytes\\Ransomware_Research\\ShadowVolumeCopy\\backup"
+original_directory = "E:\\DeepCytes\\Ransomware_Research\\ShadowVolumeCopy\\original"
 backup_interval_seconds = 3600  # Backup every 1 hour (adjust as needed)
 
 class VSSFileChangeHandler(FileSystemEventHandler):
@@ -19,10 +20,12 @@ class VSSFileChangeHandler(FileSystemEventHandler):
         self.last_original_content = None
 
     def on_modified(self, event):
-        # When the file is modified, save the original file, create a backup, and track changes
-        print(f"File '{event.src_path}' has been modified. Saving the original and creating a backup.")
-        save_original()
+        # When the file is modified, create a new backup and save the original
+        print(f"File '{event.src_path}' has been modified. Creating a backup and saving the original.")
         backup_file()
+        save_original()
+
+        # Track changes in the file
         track_changes()
 
         # Check for backups
@@ -64,6 +67,7 @@ def backup_file():
 
     try:
         shutil.copy(file_to_monitor, backup_path)
+        restrict_backup_access(backup_path)  # Restrict access to the backup file
         print(f"Created backup: {backup_path}")
     except Exception as e:
         print(f"Error creating backup: {str(e)}")
@@ -75,19 +79,26 @@ def save_original():
     original_path = os.path.join(original_directory, original_file_name)
 
     try:
-        original_content = read_file_content()
-        with open(original_path, 'w') as original_file:
-            original_file.write(original_content)
+        shutil.copy(file_to_monitor, original_path)
         print(f"Saved the original file as: {original_path}")
     except Exception as e:
         print(f"Error saving the original file: {str(e)}")
+
+def restrict_backup_access(file_path):
+    try:
+        # Use icacls command to restrict access to the file
+        subprocess.run(["icacls", file_path, "/inheritance:r"])
+        subprocess.run(["icacls", file_path, "/remove", "Everyone"])
+        print(f"Access to the backup file '{file_path}' has been restricted.")
+    except Exception as e:
+        print(f"Error restricting access: {str(e)}")
 
 def track_changes():
     current_file_content = read_file_content()
     if file_change_handler.last_original_content is not None and current_file_content != file_change_handler.last_original_content:
         print("Changes detected in the file:")
         diff_lines(current_file_content, file_change_handler.last_original_content)
-    file_change_handler.last_original_content = current_file_content
+    file_change_handler.last_original_content = current_content
 
 def read_file_content():
     with open(file_to_monitor, 'r') as file:
